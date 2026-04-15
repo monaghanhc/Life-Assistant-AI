@@ -5,10 +5,9 @@ export function getSeedUserMemory(): UserMemory {
     fullName: "Jordan Rivera",
     email: "jordan.rivera@example.com",
     phone: "(555) 014-7712",
-    city: "Brooklyn, NY",
-    tonePreference: "firm",
-    availabilityWindow: "Weekdays after 4:30 PM Eastern",
-    escalationStyle: "Polite first, then escalate with deadlines and documentation",
+    address: "124 Atlantic Ave, Brooklyn, NY",
+    tonePreference: "firm_legal",
+    landlordContact: "landlord@crown-heights-properties.example",
     recurringPainPoints: [
       "Unexpected billing changes",
       "Slow landlord maintenance responses",
@@ -16,12 +15,12 @@ export function getSeedUserMemory(): UserMemory {
     ],
     priorCases: [
       {
-        category: "bill_dispute",
+        category: "refund_request",
         targetName: "Metro Energy",
         outcome: "Refund issued after itemized dispute",
       },
       {
-        category: "file_complaint",
+        category: "service_outage",
         targetName: "Airline customer care",
         outcome: "Travel voucher after delay complaint",
       },

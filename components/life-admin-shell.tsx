@@ -16,39 +16,36 @@ import {
 
 const TASK_OPTIONS: Array<{ value: TaskCategory | "auto"; label: string }> = [
   { value: "auto", label: "Auto-detect from problem" },
-  { value: "bill_dispute", label: "Dispute a bill" },
-  { value: "landlord_employer", label: "Landlord or employer issue" },
-  { value: "cancel_subscription", label: "Cancel a subscription" },
-  { value: "schedule_appointment", label: "Schedule an appointment" },
-  { value: "file_complaint", label: "File a complaint" },
-  { value: "general_admin", label: "General admin help" },
+  { value: "landlord_issue", label: "Landlord issue" },
+  { value: "refund_request", label: "Refund request" },
+  { value: "subscription_cancel", label: "Subscription cancellation" },
+  { value: "work_complaint", label: "Work complaint" },
+  { value: "service_outage", label: "Service outage" },
+  { value: "other", label: "Other" },
 ];
 
 const CHANNEL_OPTIONS: Array<{ value: ContactChannel; label: string }> = [
   { value: "email", label: "Email" },
-  { value: "phone", label: "Phone" },
-  { value: "portal", label: "Portal" },
-  { value: "chat", label: "Chat" },
+  { value: "sms", label: "SMS" },
+  { value: "copy", label: "Copy only" },
 ];
 
 const TONE_OPTIONS: Array<{ value: ToneOption; label: string }> = [
-  { value: "firm", label: "Firm" },
-  { value: "warm", label: "Warm" },
-  { value: "direct", label: "Direct" },
-  { value: "formal", label: "Formal" },
+  { value: "friendly", label: "Friendly" },
+  { value: "firm_legal", label: "Firm / legal" },
 ];
 
 const SAMPLE_CASE: AssistRequest = {
-  category: "bill_dispute",
+  category: "landlord_issue",
   customerName: "Jordan Rivera",
-  targetName: "Metro Energy",
-  contactEmail: "billing@metroenergy.example",
+  targetName: "Crown Heights Properties",
+  contactEmail: "landlord@crown-heights-properties.example",
+  contactPhone: "(555) 010-0123",
   issue:
-    "My utility bill jumped by $124 this month even though my usage was lower than the previous cycle. I already called once and did not get a clear explanation.",
-  desiredOutcome:
-    "A corrected bill, a clear itemized explanation, and a refund or credit for any overcharge.",
+    "There is visible mold in the bedroom ceiling and hallway, and prior maintenance requests were ignored.",
+  desiredOutcome: "Immediate remediation, inspection report, and timeline in writing.",
   deadline: "April 22, 2026",
-  tone: "firm",
+  tone: "firm_legal",
   preferredChannel: "email",
   attachments: [],
 };
@@ -63,10 +60,11 @@ export function LifeAdminShell({
   const [form, setForm] = useState<AssistRequest>({
     category: "auto",
     customerName: memory.fullName,
-    targetName: "",
+    targetName: "Landlord or support team",
     contactEmail: "",
+    contactPhone: "",
     issue: "",
-    desiredOutcome: "",
+    desiredOutcome: "Resolve issue and confirm in writing.",
     deadline: "",
     tone: memory.tonePreference,
     preferredChannel: "email",
@@ -116,7 +114,7 @@ export function LifeAdminShell({
 
   async function submitRequest() {
     try {
-      const response = await fetch("/api/assist", {
+      const response = await fetch("/api/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -156,7 +154,7 @@ export function LifeAdminShell({
     }
 
     await navigator.clipboard.writeText(
-      `${packet.draftMessage.subject}\n\n${packet.draftMessage.body}`,
+      `${packet.messages.firm_legal.subject}\n\n${packet.messages.firm_legal.body}`,
     );
     setCopyState("copied");
   }
@@ -182,7 +180,7 @@ export function LifeAdminShell({
             </button>
             <div className="memory-badge">
               <strong>Memory ready</strong>
-              <span>{activeMemory.escalationStyle}</span>
+              <span>{activeMemory.address}</span>
             </div>
             <div className="memory-badge provider-badge">
               <strong>
@@ -201,8 +199,8 @@ export function LifeAdminShell({
             <strong>Billing, landlord, HR, subscriptions, appointments</strong>
           </div>
           <div className="signal-card">
-            <span className="signal-label">Remembered about you</span>
-            <strong>{activeMemory.availabilityWindow}</strong>
+            <span className="signal-label">Landlord contact</span>
+            <strong>{activeMemory.landlordContact || "Not set"}</strong>
           </div>
           <div className="signal-card">
             <span className="signal-label">Last resolved</span>
@@ -224,7 +222,7 @@ export function LifeAdminShell({
             </div>
             <p>
               Start with plain language. The assistant turns it into a message
-              and next-step workflow.
+                and next-step workflow.
             </p>
           </div>
 
@@ -295,11 +293,11 @@ export function LifeAdminShell({
             </label>
 
             <label>
-              <span>Target company or person</span>
+              <span>Who should receive this?</span>
               <input
                 onChange={(event) => updateField("targetName", event.target.value)}
-                placeholder="Metro Energy"
-                value={form.targetName}
+                placeholder="Landlord or support team"
+                value={form.targetName ?? ""}
               />
             </label>
 
@@ -311,6 +309,17 @@ export function LifeAdminShell({
                 }
                 placeholder="billing@company.com"
                 value={form.contactEmail ?? ""}
+              />
+            </label>
+
+            <label>
+              <span>Contact phone (SMS)</span>
+              <input
+                onChange={(event) =>
+                  updateField("contactPhone", event.target.value)
+                }
+                placeholder="(555) 010-1234"
+                value={form.contactPhone ?? ""}
               />
             </label>
 
@@ -387,7 +396,7 @@ export function LifeAdminShell({
             </button>
             <p className="helper-text">
               MVP output includes a draft, target recommendation, next steps,
-              and send shortcut.
+              and send shortcuts.
             </p>
           </div>
         </form>
@@ -397,12 +406,12 @@ export function LifeAdminShell({
             <div>
               <span className="eyebrow">Output</span>
               <h2>
-                {packet ? packet.headline : "Structured response appears here"}
+                {packet ? packet.issue : "Structured response appears here"}
               </h2>
             </div>
             <p>
               {packet
-                ? packet.summary
+                ? packet.action
                 : "Submit a case to generate a message, identify the best target, and prepare the escalation path."}
             </p>
           </div>
@@ -411,7 +420,7 @@ export function LifeAdminShell({
             <>
               <div className="result-block">
                 <span className="result-label">Best contact target</span>
-                <h3>{packet.contactTarget.team}</h3>
+                <h3>{packet.contactTarget.name}</h3>
                 <p>
                   {packet.contactTarget.channel.toUpperCase()} |{" "}
                   {packet.contactTarget.address}
@@ -421,8 +430,10 @@ export function LifeAdminShell({
 
               <div className="result-block">
                 <span className="result-label">Draft message</span>
-                <h3>{packet.draftMessage.subject}</h3>
-                <pre>{packet.draftMessage.body}</pre>
+                <h3>Friendly tone: {packet.messages.friendly.subject}</h3>
+                <pre>{packet.messages.friendly.body}</pre>
+                <h3>Firm/legal tone: {packet.messages.firm_legal.subject}</h3>
+                <pre>{packet.messages.firm_legal.body}</pre>
               </div>
 
               <div className="result-block">
@@ -454,9 +465,11 @@ export function LifeAdminShell({
               </div>
 
               <div className="action-row">
-                <a className="primary-button" href={packet.sendAction.href}>
-                  {packet.sendAction.label}
-                </a>
+                {packet.sendOptions.map((option) => (
+                  <a className="primary-button" href={option.href} key={option.channel}>
+                    {option.label}
+                  </a>
+                ))}
                 <button
                   className="secondary-button"
                   onClick={copyDraft}

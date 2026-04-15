@@ -1,14 +1,14 @@
 export type TaskCategory =
-  | "bill_dispute"
-  | "landlord_employer"
-  | "cancel_subscription"
-  | "schedule_appointment"
-  | "file_complaint"
-  | "general_admin";
+  | "landlord_issue"
+  | "refund_request"
+  | "subscription_cancel"
+  | "work_complaint"
+  | "service_outage"
+  | "other";
 
-export type ToneOption = "firm" | "warm" | "direct" | "formal";
+export type ToneOption = "friendly" | "firm_legal";
 
-export type ContactChannel = "email" | "phone" | "portal" | "chat";
+export type ContactChannel = "email" | "sms" | "copy";
 
 export interface AttachmentMeta {
   name: string;
@@ -19,10 +19,11 @@ export interface AttachmentMeta {
 export interface AssistRequest {
   category: TaskCategory | "auto";
   customerName?: string;
-  targetName: string;
+  targetName?: string;
   contactEmail?: string;
+  contactPhone?: string;
   issue: string;
-  desiredOutcome: string;
+  desiredOutcome?: string;
   deadline?: string;
   tone: ToneOption;
   preferredChannel: ContactChannel;
@@ -39,16 +40,15 @@ export interface UserMemory {
   fullName: string;
   email: string;
   phone: string;
-  city: string;
+  address: string;
   tonePreference: ToneOption;
-  availabilityWindow: string;
-  escalationStyle: string;
+  landlordContact?: string;
   recurringPainPoints: string[];
   priorCases: CaseMemory[];
 }
 
 export interface ContactTarget {
-  team: string;
+  name: string;
   channel: ContactChannel;
   address: string;
   reason: string;
@@ -59,20 +59,25 @@ export interface DraftMessage {
   body: string;
 }
 
-export interface SendAction {
+export interface MessageVariants {
+  friendly: DraftMessage;
+  firm_legal: DraftMessage;
+}
+
+export interface SendActionOption {
+  channel: "email" | "sms" | "copy";
   label: string;
   href: string;
-  kind: "mailto" | "copy" | "info";
 }
 
 export interface AdminPacket {
   resolvedCategory: TaskCategory;
-  headline: string;
-  summary: string;
+  issue: string;
+  action: string;
   contactTarget: ContactTarget;
-  draftMessage: DraftMessage;
+  messages: MessageVariants;
   suggestedNextSteps: string[];
-  sendAction: SendAction;
+  sendOptions: SendActionOption[];
   memorySignals: string[];
 }
 

@@ -3,74 +3,141 @@ import {
   AssistRequest,
   ContactChannel,
   TaskCategory,
+  ToneOption,
   UserMemory,
 } from "@/lib/types";
 
 const CATEGORY_KEYWORDS: Record<TaskCategory, string[]> = {
-  bill_dispute: [
-    "bill",
-    "billing",
-    "invoice",
-    "charge",
-    "charged",
-    "fee",
-    "refund",
-    "utility",
-    "overcharge",
-    "payment",
-  ],
-  landlord_employer: [
+  landlord_issue: [
     "landlord",
     "lease",
     "apartment",
     "rent",
-    "maintenance",
+    "mold",
     "repair",
+    "maintenance",
     "deposit",
-    "hr",
-    "payroll",
-    "manager",
-    "employer",
-    "workplace",
+    "tenant",
   ],
-  cancel_subscription: [
+  refund_request: [
+    "refund",
+    "charge",
+    "overcharge",
+    "billing",
+    "invoice",
+    "fee",
+    "credit",
+    "money back",
+    "reimburse",
+  ],
+  subscription_cancel: [
     "cancel",
     "subscription",
     "membership",
     "renewal",
+    "autopay",
     "terminate",
-    "trial",
   ],
-  schedule_appointment: [
-    "appointment",
+  work_complaint: [
+    "manager",
+    "hr",
+    "employer",
+    "workplace",
+    "hostile",
+    "harassment",
+    "payroll",
     "schedule",
-    "reschedule",
-    "doctor",
-    "clinic",
-    "dentist",
-    "service call",
-    "book",
   ],
-  file_complaint: [
-    "complaint",
-    "report",
-    "damaged",
-    "incident",
-    "fraud",
-    "consumer",
-    "bad service",
-    "safety",
+  service_outage: [
+    "internet",
+    "outage",
+    "service down",
+    "down for",
+    "utility outage",
+    "no service",
+    "connection",
   ],
-  general_admin: [],
+  other: [],
 };
 
 const CATEGORY_LABELS: Record<TaskCategory, string> = {
-  bill_dispute: "bill dispute",
-  landlord_employer: "landlord or employer issue",
-  cancel_subscription: "subscription cancellation",
-  schedule_appointment: "appointment scheduling",
-  file_complaint: "formal complaint",
-  general_admin: "life admin request",
+  landlord_issue: "landlord issue",
+  refund_request: "refund request",
+  subscription_cancel: "subscription cancellation",
+  work_complaint: "work complaint",
+  service_outage: "service outage",
+  other: "general admin request",
+};
+
+const TEMPLATE_LIBRARY: Record<
+  TaskCategory,
+  {
+    action: string;
+    team: string;
+    reason: string;
+    nextSteps: string[];
+  }
+> = {
+  landlord_issue: {
+    action: "Send documented complaint to landlord",
+    team: "Landlord or property manager",
+    reason: "Housing and maintenance issues need written notice and a deadline.",
+    nextSteps: [
+      "Send complaint and request acknowledgement within 24 hours.",
+      "Attach photos and any prior maintenance requests.",
+      "If no response, escalate with a final written notice in 3 business days.",
+    ],
+  },
+  refund_request: {
+    action: "Send itemized refund request",
+    team: "Billing or retention team",
+    reason: "Billing teams can issue credits and written adjustments.",
+    nextSteps: [
+      "Ask for itemized explanation of the disputed amount.",
+      "Request confirmation that collection or fees are paused while reviewed.",
+      "Escalate to a supervisor if unresolved within 3 business days.",
+    ],
+  },
+  subscription_cancel: {
+    action: "Submit cancellation with written confirmation request",
+    team: "Retention or account support",
+    reason: "Retention can confirm cancellation and stop renewals.",
+    nextSteps: [
+      "Request exact cancellation effective date.",
+      "Ask for written confirmation that future charges are blocked.",
+      "Dispute charge immediately if a renewal still posts.",
+    ],
+  },
+  work_complaint: {
+    action: "File formal work complaint",
+    team: "HR or direct manager",
+    reason: "Workplace issues require documented internal review.",
+    nextSteps: [
+      "Keep details factual and include dates, times, and witnesses.",
+      "Request acknowledgement and expected review timeline.",
+      "Follow up in writing if no response within 2 business days.",
+    ],
+  },
+  service_outage: {
+    action: "Request outage credit and service restoration timeline",
+    team: "Service provider support or billing",
+    reason: "Providers can apply outage credits and timeline commitments.",
+    nextSteps: [
+      "Request account credit for downtime period.",
+      "Ask for restoration ETA and incident reference number.",
+      "Escalate to billing if credit is denied.",
+    ],
+  },
+  other: {
+    action: "Send formal support request",
+    team: "Support or operations team",
+    reason: "A documented request creates an auditable timeline.",
+    nextSteps: [
+      "Request written acknowledgement and owner of the issue.",
+      "Ask for concrete next step and expected resolution date.",
+      "Escalate after 3 business days with your prior message included.",
+    ],
+  },
 };
 
 export function generateAdminPacket(
@@ -86,114 +153,99 @@ export function generateFallbackAdminPacket(
 ): AdminPacket {
   const resolvedCategory =
     request.category === "auto" ? inferCategory(request) : request.category;
-  const personName = request.customerName?.trim() || memory.fullName;
-  const tone = request.tone || memory.tonePreference;
-  const channel = request.preferredChannel || inferChannel(resolvedCategory);
-  const summary = buildSummary(request, resolvedCategory);
-  const contactTarget = buildContactTarget(request, resolvedCategory, channel);
-  const draftMessage = buildDraftMessage(
+  const chosenTemplate = TEMPLATE_LIBRARY[resolvedCategory];
+  const customerName = request.customerName?.trim() || memory.fullName;
+  const contactTarget = buildContactTarget(request, resolvedCategory, chosenTemplate);
+  const friendly = buildDraftMessage(
     request,
     memory,
-    personName,
+    customerName,
     resolvedCategory,
-    tone,
-    contactTarget.address,
+    "friendly",
+    contactTarget.name,
   );
-  const suggestedNextSteps = buildNextSteps(
+  const legal = buildDraftMessage(
     request,
+    memory,
+    customerName,
     resolvedCategory,
-    contactTarget.channel,
-  );
-  const sendAction = buildSendAction(
-    request.contactEmail,
-    draftMessage.subject,
-    draftMessage.body,
-    channel,
+    "firm_legal",
+    contactTarget.name,
   );
 
   return {
     resolvedCategory,
-    headline: `Ready-to-send ${CATEGORY_LABELS[resolvedCategory]} packet`,
-    summary,
+    issue: summarizeIssue(request, resolvedCategory),
+    action: chosenTemplate.action,
     contactTarget,
-    draftMessage,
-    suggestedNextSteps,
-    sendAction,
-    memorySignals: buildMemorySignals(memory, request, tone),
+    messages: {
+      friendly,
+      firm_legal: legal,
+    },
+    suggestedNextSteps: mergeSteps(chosenTemplate.nextSteps, request.deadline),
+    sendOptions: buildSendOptions(
+      request.contactEmail,
+      request.contactPhone,
+      legal.subject,
+      legal.body,
+    ),
+    memorySignals: buildMemorySignals(memory, request),
   };
 }
 
 export function inferCategory(request: AssistRequest): TaskCategory {
-  const haystack = `${request.targetName} ${request.issue} ${request.desiredOutcome}`.toLowerCase();
+  const haystack = `${request.targetName ?? ""} ${request.issue} ${request.desiredOutcome ?? ""}`.toLowerCase();
   const scores = Object.entries(CATEGORY_KEYWORDS).map(([category, keywords]) => {
     const score = keywords.reduce((total, keyword) => {
       return total + (haystack.includes(keyword) ? 1 : 0);
     }, 0);
-
     return [category as TaskCategory, score] as const;
   });
-
   scores.sort((left, right) => right[1] - left[1]);
-
   if (scores[0]?.[1] && scores[0][1] > 0) {
     return scores[0][0];
   }
-
-  return "general_admin";
+  return "other";
 }
 
 export function inferChannel(category: TaskCategory): ContactChannel {
-  switch (category) {
-    case "schedule_appointment":
-      return "phone";
-    case "cancel_subscription":
-      return "chat";
-    case "file_complaint":
-      return "portal";
-    default:
-      return "email";
+  if (category === "service_outage") {
+    return "sms";
   }
+  return "email";
 }
 
 export function getCategoryLabel(category: TaskCategory): string {
   return CATEGORY_LABELS[category];
 }
 
-function buildSummary(request: AssistRequest, category: TaskCategory): string {
-  const target = request.targetName.trim() || "the target organization";
-  return `This ${CATEGORY_LABELS[category]} packet is focused on ${target}. The request centers on "${request.desiredOutcome.trim()}" and includes a clear summary, escalation path, and ready-to-send message.`;
+function summarizeIssue(request: AssistRequest, category: TaskCategory): string {
+  const target = request.targetName?.trim() || "the responsible party";
+  return `${CATEGORY_LABELS[category]} involving ${target}: ${request.issue.trim()}`;
 }
 
 function buildContactTarget(
   request: AssistRequest,
   category: TaskCategory,
-  channel: ContactChannel,
+  chosenTemplate: {
+    team: string;
+    reason: string;
+  },
 ) {
-  const targetName = request.targetName.trim() || "Target organization";
-  const contactEmail = request.contactEmail?.trim();
-
-  const teamMap: Record<TaskCategory, string> = {
-    bill_dispute: "billing or retention team",
-    landlord_employer: "property manager, landlord, HR, or direct supervisor",
-    cancel_subscription: "retention or account support team",
-    schedule_appointment: "front desk or scheduling coordinator",
-    file_complaint: "customer care or formal complaint desk",
-    general_admin: "support or operations team",
-  };
-
+  const targetName = request.targetName?.trim() || chosenTemplate.team;
+  const preferred = request.preferredChannel || inferChannel(category);
   const address =
-    contactEmail ||
-    (channel === "phone"
-      ? "Use the published phone line or front desk number"
-      : channel === "portal"
-        ? "Use the official support or complaint portal"
-        : "Use the published support inbox or primary contact address");
-
+    preferred === "email"
+      ? request.contactEmail?.trim() ||
+        (category === "landlord_issue" ? "Use saved landlord email" : "Use support email")
+      : preferred === "sms"
+        ? request.contactPhone?.trim() || "Use support SMS or service number"
+        : "Copy and send via your preferred channel";
   return {
-    team: `${targetName} ${teamMap[category]}`,
-    channel,
+    name: targetName,
+    channel: preferred,
     address,
-    reason: `Best first stop for a ${CATEGORY_LABELS[category]} because this team can confirm receipt, document the issue, and resolve or escalate it quickly.`,
+    reason: chosenTemplate.reason,
   };
 }
 
@@ -202,153 +254,76 @@ function buildDraftMessage(
   memory: UserMemory,
   personName: string,
   category: TaskCategory,
-  tone: string,
-  addressHint: string,
+  tone: ToneOption,
+  targetName: string,
 ) {
-  const targetName = request.targetName.trim() || "your team";
-  const intro = buildToneIntro(tone, category);
-  const attachmentLine = request.attachments.length
-    ? `I have attached supporting materials: ${request.attachments
-        .map((item) => item.name)
-        .join(", ")}.`
-    : "I can provide supporting screenshots, documents, or photos if needed.";
+  const subjectPrefix = tone === "firm_legal" ? "Formal Notice" : "Request";
   const deadlineLine = request.deadline?.trim()
-    ? `Please respond by ${request.deadline.trim()} or let me know the expected timeline.`
-    : "Please confirm next steps and the expected resolution timeline.";
-
+    ? `Please confirm by ${request.deadline.trim()}.`
+    : "Please confirm receipt and next steps.";
   return {
-    subject: composeSubject(request, category),
+    subject: `${subjectPrefix}: ${getCategoryLabel(category)} for ${targetName}`,
     body: [
       `Hello ${targetName},`,
       "",
-      intro,
-      `I am writing about the following issue: ${request.issue.trim()}`,
-      `What I need: ${request.desiredOutcome.trim()}.`,
+      tone === "firm_legal"
+        ? "This is a documented request requiring written follow-up."
+        : "I am reaching out to resolve this issue quickly.",
+      `Issue: ${request.issue.trim()}`,
+      `Requested outcome: ${(request.desiredOutcome?.trim() || "Please resolve the issue and confirm completion.").trim()}`,
       deadlineLine,
-      attachmentLine,
+      request.attachments.length > 0
+        ? `Attached proof: ${request.attachments.map((item) => item.name).join(", ")}.`
+        : "I can share supporting documentation on request.",
       "",
-      `For coordination, my preferred contact details are ${memory.email} and ${memory.phone}.`,
-      `My usual availability is ${memory.availabilityWindow}.`,
-      "",
-      "Please reply to confirm receipt. If this needs to be routed elsewhere, please forward it to the correct team or let me know where to send it instead.",
-      "",
-      "Thank you,",
-      personName,
-      `${memory.city}`,
-      `Contact route noted in assistant plan: ${addressHint}`,
+      `Name: ${personName}`,
+      `Address: ${memory.address}`,
+      `Contact: ${memory.email} | ${memory.phone}`,
     ].join("\n"),
   };
 }
 
-function buildToneIntro(tone: string, category: TaskCategory): string {
-  switch (tone) {
-    case "warm":
-      return `Thanks in advance for reviewing this ${CATEGORY_LABELS[category]} request. I am hoping we can resolve it quickly and clearly.`;
-    case "direct":
-      return `I need help resolving this ${CATEGORY_LABELS[category]} request and want to make the facts and requested outcome clear upfront.`;
-    case "formal":
-      return `Please treat this as a formal ${CATEGORY_LABELS[category]} request requiring documented follow-up.`;
-    default:
-      return `I am reaching out to resolve this ${CATEGORY_LABELS[category]} in a straightforward and documented way.`;
+function mergeSteps(defaultSteps: string[], deadline: string | undefined): string[] {
+  const steps = [...defaultSteps];
+  if (deadline?.trim()) {
+    steps.unshift(`Use the provided deadline (${deadline.trim()}) in your first message.`);
   }
+  return steps.slice(0, 5);
 }
 
-function composeSubject(request: AssistRequest, category: TaskCategory): string {
-  const target = request.targetName.trim() || "Support";
-  const outcome = request.desiredOutcome.trim();
-  const prefixMap: Record<TaskCategory, string> = {
-    bill_dispute: "Billing issue",
-    landlord_employer: "Follow-up request",
-    cancel_subscription: "Cancellation request",
-    schedule_appointment: "Scheduling request",
-    file_complaint: "Formal complaint",
-    general_admin: "Support request",
-  };
-
-  return `${prefixMap[category]} for ${target}: ${outcome}`;
-}
-
-function buildNextSteps(
-  request: AssistRequest,
-  category: TaskCategory,
-  channel: ContactChannel,
-): string[] {
-  const baseSteps = [
-    `Send the draft through ${channel} and keep a timestamped copy.`,
-    "Save screenshots, bills, lease clauses, or receipts in one folder before sending.",
-  ];
-
-  if (request.deadline?.trim()) {
-    baseSteps.push(`If there is no response by ${request.deadline.trim()}, send a shorter escalation follow-up.`);
-  } else {
-    baseSteps.push("If there is no response within 3 business days, send a shorter escalation follow-up.");
-  }
-
-  switch (category) {
-    case "bill_dispute":
-      baseSteps.push("Ask for an itemized explanation, refund amount, and confirmation that late fees will be paused during review.");
-      break;
-    case "landlord_employer":
-      baseSteps.push("Reference any lease clause, policy, or written prior notice when you follow up.");
-      break;
-    case "cancel_subscription":
-      baseSteps.push("Ask for written confirmation that renewal and future charges are fully stopped.");
-      break;
-    case "schedule_appointment":
-      baseSteps.push("Offer two or three specific time windows to reduce back-and-forth.");
-      break;
-    case "file_complaint":
-      baseSteps.push("Request a case number and the date when the complaint review will be completed.");
-      break;
-    default:
-      baseSteps.push("Clarify the owner of the request and the next concrete action they need to take.");
-      break;
-  }
-
-  return baseSteps;
-}
-
-export function buildSendAction(
+export function buildSendOptions(
   contactEmail: string | undefined,
+  contactPhone: string | undefined,
   subject: string,
   body: string,
-  channel: ContactChannel,
 ) {
-  if (channel === "email") {
-    const href = `mailto:${contactEmail?.trim() || ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    return {
-      label: contactEmail?.trim() ? "Open drafted email" : "Open email draft",
-      href,
-      kind: "mailto" as const,
-    };
-  }
-
-  return {
-    label: "Copy draft for sending",
-    href: "#draft-message",
-    kind: "copy" as const,
-  };
+  return [
+    {
+      channel: "email" as const,
+      label: contactEmail?.trim() ? "Open email draft" : "Email (add recipient)",
+      href: `mailto:${contactEmail?.trim() || ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
+    },
+    {
+      channel: "sms" as const,
+      label: contactPhone?.trim() ? "Open SMS draft" : "SMS (add recipient)",
+      href: `sms:${contactPhone?.trim() || ""}?body=${encodeURIComponent(`${subject}\n\n${body}`)}`,
+    },
+    {
+      channel: "copy" as const,
+      label: "Copy message",
+      href: "#draft-message",
+    },
+  ];
 }
 
-function buildMemorySignals(
-  memory: UserMemory,
-  request: AssistRequest,
-  tone: string,
-): string[] {
+function buildMemorySignals(memory: UserMemory, request: AssistRequest): string[] {
   const signals = [
-    `Used preferred tone: ${tone}.`,
-    `Included saved contact details: ${memory.email} and ${memory.phone}.`,
-    `Applied remembered availability window: ${memory.availabilityWindow}.`,
+    `Used saved user profile: ${memory.fullName}.`,
+    `Used saved address: ${memory.address}.`,
+    `Primary contact channel preference: ${request.preferredChannel}.`,
   ];
-
-  const priorMatch = memory.priorCases.find(
-    (item) => item.targetName === request.targetName.trim(),
-  );
-  if (priorMatch) {
-    signals.push(
-      `Matched a prior case with ${priorMatch.targetName}: ${priorMatch.outcome}.`,
-    );
+  if (memory.landlordContact) {
+    signals.push(`Landlord contact remembered: ${memory.landlordContact}.`);
   }
-
   return signals;
 }

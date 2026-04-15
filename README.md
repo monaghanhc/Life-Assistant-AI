@@ -12,9 +12,18 @@ The current build focuses on one high-value loop:
 
 - Accepts a plain-language issue plus an optional category.
 - Supports attachment metadata for screenshots, photos, or documents.
-- Produces a draft message, recommended target team, escalation steps, and a send shortcut.
-- Uses a small memory layer to inject saved contact details, tone, and availability into the output.
+- Produces issue diagnosis, dual-tone messages (friendly + firm/legal), target recommendation, and one-click send options.
+- Uses a lightweight memory layer to inject saved profile details and recurring contacts into output.
 - Uses the OpenAI Responses API when `OPENAI_API_KEY` is set, and falls back to a deterministic local generator when it is not.
+
+## API routes
+
+- `POST /api/classify`: classify problem into one of the MVP categories.
+- `POST /api/generate`: generate the full structured action packet.
+- `POST /api/send`: queue or prepare send action (`email`, `sms`, `copy`).
+- `GET /api/memory`: fetch demo user memory.
+- `POST /api/memory`: update demo user memory.
+- `POST /api/assist`: compatibility route that mirrors generation behavior.
 
 ## Secrets
 

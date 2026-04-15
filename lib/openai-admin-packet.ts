@@ -4,7 +4,7 @@ import OpenAI from "openai";
 
 import { getOpenAiConfig } from "@/lib/env";
 import {
-  buildSendAction,
+  buildSendOptions,
   generateFallbackAdminPacket,
   getCategoryLabel,
   inferCategory,
@@ -17,16 +17,22 @@ import {
 } from "@/lib/types";
 
 interface OpenAiAdminDraft {
-  headline?: string;
-  summary?: string;
+  issue?: string;
+  action?: string;
   contactTarget?: {
-    team?: string;
+    name?: string;
     address?: string;
     reason?: string;
   };
-  draftMessage?: {
-    subject?: string;
-    body?: string;
+  messages?: {
+    friendly?: {
+      subject?: string;
+      body?: string;
+    };
+    firm_legal?: {
+      subject?: string;
+      body?: string;
+    };
   };
   suggestedNextSteps?: string[];
   memorySignals?: string[];
@@ -58,7 +64,7 @@ export async function generateOpenAiAdminPacket(
       "Do not invent laws, promises, or contact details that were not provided.",
       "Keep the message actionable, concise, and ready to send.",
       "Preserve the user's requested tone and desired outcome.",
-      'Use this JSON shape: {"headline":"string","summary":"string","contactTarget":{"team":"string","address":"string","reason":"string"},"draftMessage":{"subject":"string","body":"string"},"suggestedNextSteps":["string"],"memorySignals":["string"]}',
+      'Use this JSON shape: {"issue":"string","action":"string","contactTarget":{"name":"string","address":"string","reason":"string"},"messages":{"friendly":{"subject":"string","body":"string"},"firm_legal":{"subject":"string","body":"string"}},"suggestedNextSteps":["string"],"memorySignals":["string"]}',
     ].join(" "),
     input: buildInput(request, memory, resolvedCategory, fallbackPacket),
   });
@@ -100,18 +106,18 @@ function buildInput(
     `Preferred channel: ${request.preferredChannel}`,
     `Tone: ${request.tone}`,
     `Issue: ${request.issue}`,
-    `Desired outcome: ${request.desiredOutcome}`,
+    `Desired outcome: ${request.desiredOutcome || "not provided"}`,
     `Deadline: ${request.deadline || "not provided"}`,
     `Contact email provided: ${request.contactEmail || "none"}`,
     `Attachments: ${attachments}`,
     `User memory name: ${request.customerName || memory.fullName}`,
     `User memory email: ${memory.email}`,
     `User memory phone: ${memory.phone}`,
-    `User memory availability: ${memory.availabilityWindow}`,
-    `User escalation style: ${memory.escalationStyle}`,
+    `User memory address: ${memory.address}`,
+    `User landlord contact: ${memory.landlordContact || "none"}`,
     `Prior cases: ${memory.priorCases.map((item) => `${item.targetName} -> ${item.outcome}`).join("; ")}`,
-    `Fallback contact target: ${fallbackPacket.contactTarget.team} | ${fallbackPacket.contactTarget.address}`,
-    `Fallback subject: ${fallbackPacket.draftMessage.subject}`,
+    `Fallback contact target: ${fallbackPacket.contactTarget.name} | ${fallbackPacket.contactTarget.address}`,
+    `Fallback legal subject: ${fallbackPacket.messages.firm_legal.subject}`,
   ].join("\n");
 }
 
@@ -149,35 +155,46 @@ function mergeDraftWithFallback(
   request: AssistRequest,
 ): AdminPacket {
   const draftMessage = {
-    subject:
-      cleanText(draft.draftMessage?.subject) || fallbackPacket.draftMessage.subject,
-    body: cleanText(draft.draftMessage?.body) || fallbackPacket.draftMessage.body,
+    friendly: {
+      subject:
+        cleanText(draft.messages?.friendly?.subject) ||
+        fallbackPacket.messages.friendly.subject,
+      body:
+        cleanText(draft.messages?.friendly?.body) ||
+        fallbackPacket.messages.friendly.body,
+    },
+    firm_legal: {
+      subject:
+        cleanText(draft.messages?.firm_legal?.subject) ||
+        fallbackPacket.messages.firm_legal.subject,
+      body:
+        cleanText(draft.messages?.firm_legal?.body) ||
+        fallbackPacket.messages.firm_legal.body,
+    },
   };
-
-  const channel = fallbackPacket.contactTarget.channel;
 
   return {
     ...fallbackPacket,
-    headline: cleanText(draft.headline) || fallbackPacket.headline,
-    summary: cleanText(draft.summary) || fallbackPacket.summary,
+    issue: cleanText(draft.issue) || fallbackPacket.issue,
+    action: cleanText(draft.action) || fallbackPacket.action,
     contactTarget: {
       ...fallbackPacket.contactTarget,
-      team: cleanText(draft.contactTarget?.team) || fallbackPacket.contactTarget.team,
+      name: cleanText(draft.contactTarget?.name) || fallbackPacket.contactTarget.name,
       address:
         cleanText(draft.contactTarget?.address) ||
         fallbackPacket.contactTarget.address,
       reason:
         cleanText(draft.contactTarget?.reason) || fallbackPacket.contactTarget.reason,
     },
-    draftMessage,
+    messages: draftMessage,
     suggestedNextSteps:
       cleanList(draft.suggestedNextSteps) || fallbackPacket.suggestedNextSteps,
     memorySignals: cleanList(draft.memorySignals) || fallbackPacket.memorySignals,
-    sendAction: buildSendAction(
+    sendOptions: buildSendOptions(
       request.contactEmail,
-      draftMessage.subject,
-      draftMessage.body,
-      channel,
+      request.contactPhone,
+      draftMessage.firm_legal.subject,
+      draftMessage.firm_legal.body,
     ),
   };
 }
